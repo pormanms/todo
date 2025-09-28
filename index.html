@@ -1,0 +1,431 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <link rel="icon" type="image/x-icon" href="favicon.ico">
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Todo List</title>
+
+    <!-- Bootstrap v5.3 -->
+    <link
+      rel="stylesheet"
+      href="/assets/vendor/bootstrap-5.3.7/package/dist/css/bootstrap.min.css"
+    />
+    <!-- Bootstrap Icons -->
+    <link
+      rel="stylesheet"
+      href="/assets/vendor/bootstrap-icons-1.13.1/package/font/bootstrap-icons.min.css"
+    />
+    <style>
+      .drag-over {
+        border: 2px dashed #0d6efd;
+        background: rgba(13, 110, 253, 0.03);
+      }
+      .list-group-item {
+        cursor: grab;
+      }
+      .editing {
+        background: #fffbe6;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container mt-5">
+      <div>
+        <ul class="nav nav-tabs mb-3">
+          <li class="nav-item">
+            <a class="nav-link" href="magic-number.html">Magic Number</a>
+          </li>
+          <li class="nav-item">
+            <a class="nav-link" href="password-checker.html"
+              >Password Checker</a
+            >
+          </li>
+          <li class="nav-item">
+            <a class="nav-link active" aria-current="page" href="#"
+              >Todo List</a
+            >
+          </li>
+        </ul>
+
+        <h1>Todo List</h1>
+        <hr />
+
+        <!-- Form -->
+        <form id="formData" class="mb-3">
+          <div class="mb-3">
+            <label for="todoInput" class="form-label">
+              Apa rencana kamu selanjutnya?
+            </label>
+            <div class="input-group flex-nowrap">
+              <input
+                type="text"
+                class="form-control"
+                name="todo"
+                id="todoInput"
+              />
+              <button type="submit" class="btn btn-primary">
+                <i class="bi bi-plus"></i> Tambah
+              </button>
+            </div>
+            <div
+              id="todoError"
+              class="text-danger mt-1 small"
+              style="display: none"
+            ></div>
+          </div>
+        </form>
+
+        <!-- Controls: filter + search -->
+        <div class="d-flex gap-3 align-items-center mb-3">
+          <div
+            class="btn-group"
+            role="group"
+            aria-label="Filter todos"
+            id="filterGroup"
+          >
+            <button
+              type="button"
+              class="btn btn-outline-primary active"
+              data-filter="all"
+            >
+              Semua
+            </button>
+            <button
+              type="button"
+              class="btn btn-outline-primary"
+              data-filter="active"
+            >
+              Belum Selesai
+            </button>
+            <button
+              type="button"
+              class="btn btn-outline-primary"
+              data-filter="completed"
+            >
+              Selesai
+            </button>
+          </div>
+
+          <div class="flex-fill">
+            <input
+              id="searchInput"
+              class="form-control"
+              placeholder="Cari todo..."
+            />
+          </div>
+
+          <div>
+            <button
+              id="clearAllBtn"
+              class="btn btn-outline-danger"
+              title="Hapus semua todo"
+            >
+              <i class="bi bi-trash"></i> Kosongkan
+            </button>
+          </div>
+        </div>
+
+        <ul class="list-group" id="todoList" aria-live="polite"></ul>
+      </div>
+    </div>
+
+    <script>
+      let todos = [];
+      let currentFilter = "all";
+      let searchTerm = "";
+
+      const todoListEl = document.getElementById("todoList");
+      const form = document.getElementById("formData");
+      const todoInputEl = document.getElementById("todoInput");
+      const todoErrorEl = document.getElementById("todoError");
+      const searchInputEl = document.getElementById("searchInput");
+      const filterGroupEl = document.getElementById("filterGroup");
+      const clearAllBtn = document.getElementById("clearAllBtn");
+
+      function saveTodos() {
+        localStorage.setItem("todos", JSON.stringify(todos));
+      }
+
+      function loadTodos() {
+        const stored = localStorage.getItem("todos");
+        if (stored) {
+          todos = JSON.parse(stored);
+        }
+      }
+
+      function genId() {
+        return (
+          Date.now().toString(36) +
+          "-" +
+          Math.random().toString(36).slice(2, 8)
+        );
+      }
+
+      function matchesFilter(item) {
+        if (currentFilter === "all") return true;
+        if (currentFilter === "completed") return item.completed;
+        if (currentFilter === "active") return !item.completed;
+        return true;
+      }
+
+      function matchesSearch(item) {
+        if (!searchTerm) return true;
+        return item.todo.toLowerCase().includes(searchTerm.toLowerCase());
+      }
+
+      function renderTodos() {
+        const toRender = todos
+          .filter((item) => matchesFilter(item))
+          .filter((item) => matchesSearch(item));
+
+        todoListEl.innerHTML = "";
+
+        if (toRender.length === 0) {
+          const empty = document.createElement("li");
+          empty.className = "list-group-item";
+          empty.textContent = "Tidak ada todo sesuai kriteria.";
+          todoListEl.appendChild(empty);
+          return;
+        }
+
+        toRender.forEach((item) => {
+          const li = document.createElement("li");
+          li.className = "list-group-item d-flex align-items-center";
+          li.setAttribute("draggable", "true");
+          li.dataset.id = item.id;
+
+          li.addEventListener("dragstart", (e) => {
+            e.dataTransfer.setData("text/plain", item.id);
+            li.classList.add("dragging");
+          });
+          li.addEventListener("dragend", () => {
+            li.classList.remove("dragging");
+            document
+              .querySelectorAll(".drag-over")
+              .forEach((n) => n.classList.remove("drag-over"));
+          });
+          li.addEventListener("dragover", (e) => {
+            e.preventDefault();
+            li.classList.add("drag-over");
+          });
+          li.addEventListener("dragleave", () => {
+            li.classList.remove("drag-over");
+          });
+          li.addEventListener("drop", (e) => {
+            e.preventDefault();
+            li.classList.remove("drag-over");
+            const draggedId = e.dataTransfer.getData("text/plain");
+            if (!draggedId || draggedId === item.id) return;
+            reorderByDrop(draggedId, item.id);
+            saveTodos();
+            renderTodos();
+          });
+
+          const leftDiv = document.createElement("div");
+          leftDiv.className = "flex-fill d-flex align-items-center gap-2";
+
+          const checkbox = document.createElement("input");
+          checkbox.type = "checkbox";
+          checkbox.className = "form-check-input me-1";
+          checkbox.checked = !!item.completed;
+          checkbox.addEventListener("change", () => {
+            const todoIndex = todos.findIndex((t) => t.id === item.id);
+            if (todoIndex !== -1) {
+              todos[todoIndex].completed = checkbox.checked;
+              saveTodos();
+              renderTodos();
+            }
+          });
+          leftDiv.appendChild(checkbox);
+
+          const label = document.createElement("label");
+          label.className = "form-check-label flex-fill mb-0";
+          label.style.userSelect = "none";
+          label.textContent = item.todo;
+          label.style.textDecoration = item.completed
+            ? "line-through"
+            : "none";
+          leftDiv.appendChild(label);
+
+          const rightDiv = document.createElement("div");
+          rightDiv.className = "d-flex gap-1 align-items-center";
+
+          const editBtn = document.createElement("button");
+          editBtn.className = "btn btn-sm btn-outline-secondary";
+          editBtn.title = "Ubah";
+          editBtn.innerHTML = '<i class="bi bi-pencil"></i>';
+          editBtn.addEventListener("click", () => {
+            startEditing(item.id, li, label, editBtn, deleteBtn);
+          });
+
+          const deleteBtn = document.createElement("button");
+          deleteBtn.className = "btn btn-sm btn-outline-danger";
+          deleteBtn.title = "Hapus";
+          deleteBtn.innerHTML = '<i class="bi bi-trash"></i>';
+          deleteBtn.addEventListener("click", () => {
+            if (!confirm("Hapus todo ini?")) return;
+            todos = todos.filter((t) => t.id !== item.id);
+            saveTodos();
+            renderTodos();
+          });
+
+          const dragHandle = document.createElement("span");
+          dragHandle.className = "px-2";
+          dragHandle.title = "Tarik untuk memindahkan";
+          dragHandle.innerHTML = '<i class="bi bi-arrows-move"></i>';
+
+          rightDiv.appendChild(editBtn);
+          rightDiv.appendChild(deleteBtn);
+          rightDiv.appendChild(dragHandle);
+
+          li.appendChild(leftDiv);
+          li.appendChild(rightDiv);
+
+          todoListEl.appendChild(li);
+        });
+      }
+
+      function reorderByDrop(draggedId, targetId) {
+        const draggedIndex = todos.findIndex((t) => t.id === draggedId);
+        const targetIndex = todos.findIndex((t) => t.id === targetId);
+        if (draggedIndex === -1 || targetIndex === -1) return;
+
+        const [draggedItem] = todos.splice(draggedIndex, 1);
+        const insertIndex = todos.findIndex((t) => t.id === targetId);
+        todos.splice(insertIndex, 0, draggedItem);
+      }
+
+      function startEditing(id, liElement, labelElement, editBtn, deleteBtn) {
+        if (document.querySelector(".editing")) {
+          renderTodos();
+        }
+
+        liElement.classList.add("editing");
+
+        const todoIndex = todos.findIndex((t) => t.id === id);
+        if (todoIndex === -1) return;
+        const currentText = todos[todoIndex].todo;
+
+        const input = document.createElement("input");
+        input.type = "text";
+        input.className = "form-control form-control-sm";
+        input.value = currentText;
+
+        const leftDiv = labelElement.parentElement;
+        leftDiv.replaceChild(input, labelElement);
+        input.focus();
+
+        editBtn.className = "btn btn-sm btn-success";
+        editBtn.innerHTML = '<i class="bi bi-check-lg"></i>';
+
+        const cancelBtn = document.createElement("button");
+        cancelBtn.className = "btn btn-sm btn-outline-secondary";
+        cancelBtn.innerHTML = '<i class="bi bi-x-lg"></i>';
+        deleteBtn.style.display = "none";
+
+        function saveEdit() {
+          const newText = input.value.trim();
+          if (newText === "") {
+            alert("Todo tidak boleh kosong!");
+            input.focus();
+            return;
+          }
+          const duplicate = todos.some(
+            (t, i) =>
+              i !== todoIndex &&
+              t.todo.trim().toLowerCase() === newText.toLowerCase()
+          );
+          if (duplicate) {
+            alert("Todo sudah ada!");
+            input.focus();
+            return;
+          }
+          todos[todoIndex].todo = newText;
+          saveTodos();
+          renderTodos();
+        }
+
+        function cancelEdit() {
+          renderTodos();
+        }
+
+        editBtn.onclick = (e) => {
+          e.preventDefault();
+          saveEdit();
+        };
+        cancelBtn.onclick = (e) => {
+          e.preventDefault();
+          cancelEdit();
+        };
+        input.addEventListener("keydown", (ev) => {
+          if (ev.key === "Enter") saveEdit();
+          if (ev.key === "Escape") cancelEdit();
+        });
+
+        editBtn.parentElement.insertBefore(cancelBtn, deleteBtn);
+      }
+
+      form.addEventListener("submit", function (event) {
+        event.preventDefault();
+        const todoInput = todoInputEl.value.trim();
+        todoErrorEl.style.display = "none";
+        todoErrorEl.textContent = "";
+
+        if (todoInput === "") {
+          todoErrorEl.textContent = "Todo tidak boleh kosong!";
+          todoErrorEl.style.display = "block";
+          return;
+        }
+
+        const duplicate = todos.some(
+          (t) => t.todo.trim().toLowerCase() === todoInput.toLowerCase()
+        );
+        if (duplicate) {
+          todoErrorEl.textContent = "Todo sudah ada!";
+          todoErrorEl.style.display = "block";
+          return;
+        }
+
+        todos.unshift({
+          id: genId(),
+          todo: todoInput,
+          completed: false,
+        });
+        todoInputEl.value = "";
+        saveTodos();
+        renderTodos();
+      });
+
+      filterGroupEl.addEventListener("click", (e) => {
+        const btn = e.target.closest("button");
+        if (!btn) return;
+        currentFilter = btn.dataset.filter;
+        filterGroupEl
+          .querySelectorAll("button")
+          .forEach((b) => b.classList.remove("active"));
+        btn.classList.add("active");
+        renderTodos();
+      });
+
+      searchInputEl.addEventListener("input", (e) => {
+        searchTerm = e.target.value.trim();
+        renderTodos();
+      });
+
+      clearAllBtn.addEventListener("click", () => {
+        if (!confirm("Yakin ingin menghapus SEMUA todo?")) return;
+        todos = [];
+        saveTodos();
+        renderTodos();
+      });
+
+      window.addEventListener("beforeunload", saveTodos);
+
+      document.addEventListener("DOMContentLoaded", () => {
+        loadTodos();
+        renderTodos();
+      });
+    </script>
+  </body>
+</html>
